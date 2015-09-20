@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -23,6 +24,8 @@
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running */
 static struct list ready_list;
+
+static struct list wait_list;
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -91,6 +94,7 @@ thread_init (void)
 
   lock_init (&tid_lock);
   list_init (&ready_list);
+	list_init (&wait_list);
   list_init (&all_list);
 
   /* Set up a thread structure for the running thread. */
@@ -314,6 +318,51 @@ thread_yield (void)
   intr_set_level (old_level);
 }
 
+/* function to compare two items of wating thread. just compare the finish time */
+bool is_less_time (const struct list_elem* a, const struct list_elem* b, void* aux){
+	struct thread* thread_a = list_entry (a, struct thread, elem), *thread_b = list_entry (b, struct thread, elem);
+	return (thread_a->wait_start + thread_a->wait_length) < (thread_b->wait_start + thread_b->wait_length);
+
+}
+
+void thread_sleep (int64_t start, int64_t ticks){
+	struct thread *cur = thread_current ();
+	enum intr_level old_level;
+
+	ASSERT (!intr_context());//check if the current cpu is handling interrupt or not
+	
+	old_level = intr_disable ();
+	cur->status = THREAD_READY;
+	cur->wait_start = start;
+	cur->wait_length = ticks;
+	cur->wait_flag = true;
+
+	list_insert_ordered (&wait_list, &cur->elem, is_less_time, NULL);
+
+	schedule();
+
+	intr_set_level (old_level);//return to the original interrupt level
+}
+
+void wake_thread (){
+	enum intr_level old_level;
+	ASSERT (!intr_context());
+	old_level = intr_disable();
+
+	struct list_elem* e;
+	struct thread* th;
+
+	while(!list_empty(&wait_list)){
+		e = list_begin(&wait_list);
+		th = list_entry(e, struct thread, elem);
+		if(timer_elapsed(th->wait_start) >= th->wait_length){
+			list_remove(e);
+			list_push_back (&ready_list, &th->elem);
+		}else break;
+	}
+	intr_set_level (old_level);
+}
+
 /* Invoke function 'func' on all threads, passing along 'aux'.
    This function must be called with interrupts off. */
 void
@@ -490,6 +539,7 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
+	wake_thread();
   if (list_empty (&ready_list))
     return idle_thread;
   else
