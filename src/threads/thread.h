@@ -88,6 +88,7 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+    int old_priority;                   /* Old priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 		
 		int64_t wait_start;
@@ -130,7 +131,8 @@ const char *thread_name (void);
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
 void thread_sleep (int64_t, int64_t);
-bool is_less_time (const struct list_elem*, const struct list_elem*, void*);
+bool is_less_time (const struct list_elem*, const struct list_elem*, void *aux);
+bool is_higher_priority (const struct list_elem *, const struct list_elem *, void *aux);
 void wake_thread (void);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
