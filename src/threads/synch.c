@@ -114,7 +114,7 @@ sema_up (struct semaphore *sema)
 
   old_level = intr_disable ();
   if (!list_empty (&sema->waiters)) {
-      list_sort(&sema->waiters, is_higher_priority, NULL);
+      list_sort(&sema->waiters, is_higher_priority, NULL); // sorting list
       thread_unblock (list_entry (list_pop_front (&sema->waiters), struct thread, elem));
   }
   sema->value++;
@@ -199,21 +199,25 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  if(lock->holder != NULL) {
-    enum intr_level old_level;
-    old_level = intr_disable();
-    int curr_priority = thread_get_priority();
-
-    // When running thread's priority is lower than current thread (the current thread is asking to acquire lock)
-    if(lock->holder->priority < curr_priority) {
-        lock->holder->old_priority = lock->holder->priority; // save old_priority.
-        lock->holder->priority = curr_priority; // priority donation.
-    }
-    intr_set_level(old_level);
-  }
+  priority_donation(lock);
 
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
+}
+
+void priority_donation(struct lock *lock) {
+    if(lock->holder != NULL) {
+        enum intr_level old_level;
+        old_level = intr_disable();
+        int curr_priority = thread_get_priority();
+
+      // When running thread's priority is lower than current thread (the cucrrent thread is asking to acquire lock)
+        if(lock->holder->priority < curr_priority) {
+              lock->holder->old_priority = lock->holder->priority; // save old_priority.
+              lock->holder->priority = curr_priority; // priority donation.
+         }
+        intr_set_level(old_level);
+    }
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -225,7 +229,8 @@ lock_acquire (struct lock *lock)
 bool
 lock_try_acquire (struct lock *lock)
 {
-  bool success;
+
+    bool success;
 
   ASSERT (lock != NULL);
   ASSERT (!lock_held_by_current_thread (lock));
