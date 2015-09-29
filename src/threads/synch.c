@@ -199,24 +199,28 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+  struct thread *curr = thread_current();
+  
+  curr->wait_lock = lock;
+
   priority_donation(lock);
 
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
+  curr->wait_lock = NULL;
 }
 
 void priority_donation(struct lock *lock) {
-    if(lock->holder != NULL) {
-        enum intr_level old_level;
-        old_level = intr_disable();
-        int curr_priority = thread_get_priority();
+    struct thread *owner;
+
+    if((owner = lock->holder) != NULL) {
+        struct thread *curr = thread_current();
 
       // When running thread's priority is lower than current thread (the cucrrent thread is asking to acquire lock)
-        if(lock->holder->priority < curr_priority) {
-              lock->holder->old_priority = lock->holder->priority; // save old_priority.
-              lock->holder->priority = curr_priority; // priority donation.
+        if(owner->priority < curr->priority) {
+              owner->old_priority = owner->priority; // save old_priority of lock owner.
+              owner->priority = curr->priority; // curr thread donates its priority.
          }
-        intr_set_level(old_level);
     }
 }
 
@@ -317,7 +321,7 @@ cond_wait (struct condition *cond, struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
   
   sema_init (&waiter.semaphore, 0);
-  list_insert_ordered (&cond->waiters, &waiter.elem, is_higher_priority, NULL); // priority ordered
+  list_push_back(&cond->waiters, &waiter.elem);
   lock_release (lock);
   sema_down (&waiter.semaphore);
   lock_acquire (lock);
@@ -339,7 +343,7 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (lock_held_by_current_thread (lock));
 
   if (!list_empty (&cond->waiters)) {
-      list_sort(&cond->waiters, is_higher_priority, NULL);
+    list_sort(&cond->waiters, is_higher_priority_condvar, NULL);
     sema_up (&list_entry (list_pop_front (&cond->waiters),
                           struct semaphore_elem, elem)->semaphore);
   }
@@ -359,4 +363,18 @@ cond_broadcast (struct condition *cond, struct lock *lock)
 
   while (!list_empty (&cond->waiters))
     cond_signal (cond, lock);
+}
+
+
+// function to compare priority for condvar.
+bool is_higher_priority_condvar (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+    struct semaphore_elem *se_a = list_entry(a, struct semaphore_elem, elem);
+    struct semaphore_elem *se_b = list_entry(b, struct semaphore_elem, elem);
+    struct thread *thread_a = list_entry(list_front(&se_a->semaphore.waiters), struct thread, elem);
+    struct thread *thread_b = list_entry(list_front(&se_b->semaphore.waiters), struct thread, elem);
+
+    if(thread_a->priority > thread_b->priority)
+        return true;
+    else
+        return false;
 }

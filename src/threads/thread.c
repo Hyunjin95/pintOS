@@ -95,7 +95,7 @@ thread_init (void)
 
   lock_init (&tid_lock);
   list_init (&ready_list);
-	list_init (&wait_list);
+  list_init (&wait_list);
   list_init (&all_list);
 
   /* Set up a thread structure for the running thread. */
@@ -539,6 +539,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->old_priority = priority;
   t->magic = THREAD_MAGIC;
+  t->wait_lock = NULL;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

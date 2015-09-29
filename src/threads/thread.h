@@ -91,9 +91,11 @@ struct thread
     int old_priority;                   /* Old priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 		
-		int64_t wait_start;
-		int64_t wait_length;
-		bool wait_flag;	
+	int64_t wait_start;
+	int64_t wait_length;
+	bool wait_flag;	
+
+    struct lock *wait_lock;             /* Lock that the thread waits to acquire */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
