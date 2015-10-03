@@ -89,14 +89,17 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     int old_priority;                   /* Old priority. */
+    int set_priority;                   /* When thread_set_priority called, If there's donated lock of current thread, then the thread has to wait until lock_release. */
+                                        /* This variable is for remembering set-value. */
     struct list_elem allelem;           /* List element for all threads list. */
 		
 	int64_t wait_start;
 	int64_t wait_length;
 	bool wait_flag;	
 
-    struct lock *wait_lock;             /* Lock that the thread waits to acquire */
 
+    struct lock *wait_lock;             /* Lock that the thread waits to acquire */
+    struct list lock_list;              /* List of donated locks by other thread */
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 

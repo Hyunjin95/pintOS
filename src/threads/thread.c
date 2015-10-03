@@ -408,9 +408,16 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
-  thread_current ()->old_priority = new_priority;
-  thread_yield(); // If priority were changed, change the running thread immediately.
+    struct thread *curr = thread_current();
+    
+    if(list_empty(&curr->lock_list)) { // Set priority if only there's no donated lock in current thread.
+        curr->priority = new_priority;
+        thread_yield(); // If priority were changed, change the running thread immediately.
+    }
+    else { // otherwise, remember set-value to wait until lock release.
+        curr->set_priority = new_priority;
+    }
+    
 }
 
 /* Returns the current thread's priority. */
@@ -537,9 +544,11 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
-  t->old_priority = priority;
+  t->old_priority = -1;
+  t->set_priority = -1;
   t->magic = THREAD_MAGIC;
   t->wait_lock = NULL;
+  list_init(&t->lock_list);
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
