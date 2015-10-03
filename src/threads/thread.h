@@ -88,12 +88,18 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+    int old_priority;                   /* Old priority. */
+    int set_priority;                   /* When thread_set_priority called, If there's donated lock of current thread, then the thread has to wait until lock_release. */
+                                        /* This variable is for remembering set-value. */
     struct list_elem allelem;           /* List element for all threads list. */
 		
-		int64_t wait_start;
-		int64_t wait_length;
-		bool wait_flag;	
+	int64_t wait_start;
+	int64_t wait_length;
+	bool wait_flag;	
 
+
+    struct lock *wait_lock;             /* Lock that the thread waits to acquire */
+    struct list lock_list;              /* List of donated locks by other thread */
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
@@ -130,7 +136,8 @@ const char *thread_name (void);
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
 void thread_sleep (int64_t, int64_t);
-bool is_less_time (const struct list_elem*, const struct list_elem*, void*);
+bool is_less_time (const struct list_elem*, const struct list_elem*, void *aux);
+bool is_higher_priority (const struct list_elem *, const struct list_elem *, void *aux);
 void wake_thread (void);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
