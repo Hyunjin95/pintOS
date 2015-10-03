@@ -415,7 +415,13 @@ thread_set_priority (int new_priority)
         thread_yield(); // If priority were changed, change the running thread immediately.
     }
     else { // otherwise, remember set-value to wait until lock release.
-        curr->set_priority = new_priority;
+        if(new_priority >= curr->priority) {
+            curr->priority = new_priority;
+            thread_yield();
+        }
+        else {
+            curr->set_priority = new_priority;
+        }
     }
     
 }

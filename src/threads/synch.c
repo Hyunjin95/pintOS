@@ -305,15 +305,14 @@ void priority_rollback(struct lock *lock) {
 
         // When highest priority is same with origin priority, which means there's no donated lock in current thread,
         // then reset old_priority to -1(default value).
-        if(origin_priority == highest_priority) {
+        if(origin_priority == highest_priority) 
             curr->old_priority = -1;
 
-            // When rock release, blocked thread_set_priority request has to run.
-            if(curr->set_priority != -1) {
-                int tmp = curr->set_priority;
-                curr->set_priority = -1;
-                thread_set_priority(tmp);
-            }
+        // When rock release, blocked thread_set_priority request has to run.
+        if(curr->set_priority != -1) {
+            int tmp = curr->set_priority;
+            curr->set_priority = -1;
+            thread_set_priority(tmp);
         }
     }
 }
