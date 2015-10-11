@@ -206,7 +206,7 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
-  if(priority > thread_get_priority()) // When new thread has higher priority than current.
+  if(priority > thread_get_priority() && !intr_context()) // When new thread has higher priority than current.
       thread_yield();
 
   return tid;
@@ -408,16 +408,18 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-    struct thread *curr = thread_current();
-    
+    struct thread *curr = thread_current();    
+
     if(list_empty(&curr->lock_list)) { // Set priority if only there's no donated lock in current thread.
         curr->priority = new_priority;
-        thread_yield(); // If priority were changed, change the running thread immediately.
+        if(!intr_context())
+            thread_yield(); // If priority were changed, change the running thread immediately.
     }
     else { // otherwise, remember set-value to wait until lock release.
         if(new_priority >= curr->priority) {
             curr->priority = new_priority;
-            thread_yield();
+            if(!intr_context())
+                thread_yield();
         }
         else {
             curr->set_priority = new_priority;
