@@ -30,6 +30,7 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
+	char *ptr;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -38,11 +39,48 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+	// Parse file name
+	file_name = strtok_r(file_name, " ", &ptr);
+
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
+}
+
+// Parsed arguments are pushed into stack according to calling convention in PPT
+void push_arguments(char **parse, int cnt, void **esp) {
+	int i, len;
+	uint32_t argv_addr[cnt]; // define argv_address
+
+	for(i = cnt-1; i >= 0; i--) {
+		*esp -= (len = strlen(parse[i]) + 1); // +1 for last position, '\0'
+		memcpy(*esp, parse[i], len);
+		argv_addr[i] = (uint32_t)*esp;
+	}
+
+	*esp = (uint32_t)*esp & 0xfffffffc; // 4bytes word-align ( 0xfffffffc = 111111..... 00)
+	
+	*esp -= 4;
+	*(uint32_t *)(*esp) = 0; // Last argv adddress is 0. (In 'echo x y z' case, argv[4] = 0
+
+	for(i = cnt-1; i >= 0; i--) { // Push argv[] address.
+		*esp -= 4;
+		*(uint32_t *)(*esp) = argv_addr[i];
+	}
+
+	// Set argv address
+	*esp -= 4;
+	*(uint32_t *)(*esp) = (uint32_t)*esp + 4;
+
+	// Set argc
+	*esp -= 4;
+	*(uint32_t *)(*esp) = cnt;
+
+	// Set return address
+	*esp -= 4;
+	*(uint32_t *)(*esp) = 0;
 }
 
 /* A thread function that loads a user process and starts it
@@ -53,6 +91,14 @@ start_process (void *file_name_)
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
+	char *token, *ptr;
+	int cnt = 0;
+
+	char *parse[65]; // In pintos, n of 'argv[n]' is limited to (128/2 + 1 == 65) in "init.c"	
+
+	for(token = strtok_r(file_name, " ", &ptr); token != NULL; token = strtok_r(NULL, " ", &ptr)) {
+		parse[cnt++] = token;
+	}
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -60,6 +106,8 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
+	push_arguments(&parse, cnt, &if_.esp);	
+//	hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -437,7 +485,7 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-        *esp = PHYS_BASE;
+        *esp = PHYS_BASE - 12;
       else
         palloc_free_page (kpage);
     }
