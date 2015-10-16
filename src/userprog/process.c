@@ -95,7 +95,9 @@ start_process (void *file_name_)
 	int cnt = 0;
 
 	char *parse[65]; // In pintos, n of 'argv[n]' is limited to (128/2 + 1 == 65) in "init.c"	
-
+	//initial space handling
+	while(file_name[0]==' ')		file_name++;
+	
 	for(token = strtok_r(file_name, " ", &ptr); token != NULL; token = strtok_r(NULL, " ", &ptr)) {
 		parse[cnt++] = token;
 	}
