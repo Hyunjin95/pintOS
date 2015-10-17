@@ -263,7 +263,37 @@ static int syscall_read(int fd, char* content, unsigned content_size){
 }
 
 static int syscall_open(char *filename){
-		return 0;
+	struct thread *cur = thread_current ();
+	struct file_elem *fe, *fe_prev;
+	struct list_elem *le;
+	int fd;
+
+	struct file *file = filesys_open(filename);
+	if(file == NULL) {
+		/* Error occured while opening file */
+		return -1;
+	}
+
+	if(!list_empty(&cur->open_files)) {
+		le = list_back(&cur->open_files);
+		fe_prev = list_entry(le, struct file_elem, elem);
+		fd = fe_prev->fd + 1;
+	} else {
+		fd = 3;
+	}
+
+	fe = (struct file_elem*)calloc(1, sizeof(struct thread));
+	if(fe == NULL) {
+		/* Error occured while allocating thread */
+		return -1;
+	}
+
+	/* Add information for the opend file */
+	fe->fd = fd;
+	fe->file = file;
+	list_push_back(&cur->open_files, &fe->elem);
+
+	return fd;
 }
 
 
