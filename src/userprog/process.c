@@ -21,6 +21,8 @@
 
 static struct semaphore sema_load;
 static struct lock lock_exec;
+static bool load_success;
+
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -51,16 +53,20 @@ process_execute (const char *file_name)
 	file_name = strtok_r(file_name, " ", &ptr);
 
 	lock_acquire(&lock_exec);
+	load_success = false;
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
 	else
+	{
 			sema_down(&sema_load);
+			if(!load_success)
+					tid = -1;
+	}
 
 	lock_release(&lock_exec);
-
 	return tid;
 }
 
@@ -425,7 +431,17 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
+	if(success){
+			file_deny_write(file);
+			t->open_file = file;
+			load_success = true;
+	}
+	else{
+		file_close(file);
+		
+	}
+
+	sema_up(&sema_load);	
   return success;
 }
 
