@@ -27,7 +27,7 @@ static int syscall_write(int, const char*, unsigned);
 static struct file * file_find(int fd);
 
 static bool is_valid(void *p) {
-	if(p != NULL && p < PHYS_BASE && pagedir_get_pages(thread_current()->pagedir, p) != NULL)
+	if(p != NULL && p < PHYS_BASE && pagedir_get_page(thread_current()->pagedir, p) != NULL)
 		return true;
 	return false;
 }
@@ -216,6 +216,7 @@ void syscall_close(int fd)
 				return;
 	
 		file_close(fe->file);
+		file_allow_write(fe->file);
 		list_remove(&fe->elem);
 		free(fe);
 		return;
@@ -260,6 +261,11 @@ static int syscall_read(int fd, char* content, unsigned content_size){
 		else return -1;
 	}
 }
+
+static int syscall_open(char *filename){
+		return 0;
+}
+
 
 
 static int syscall_write(int fd, const char* content, unsigned content_size){
