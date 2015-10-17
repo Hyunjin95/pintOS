@@ -14,15 +14,13 @@
 
 static void syscall_handler (struct intr_frame *);
 static struct lock lock_sys;
-static void syscall_init(void);
+void syscall_init(void);
 
 static int syscall_exit(int);
 static unsigned syscall_tell(int);
-static bool syscall_remove(const char*);
 static int syscall_open(char*);
 static void syscall_close(int);
 static int syscall_filesize(int);
-static bool syscall_create(const char*, unsigned);
 static void syscall_seek(int, unsigned);
 static int syscall_read(int, char*, unsigned);
 static int syscall_write(int, const char*, unsigned);
@@ -115,7 +113,10 @@ syscall_handler (struct intr_frame *f)
 			if (!is_valid(*arg_ptr[0]))
 				thread_exit();
 			lock_acquire (&lock_sys);
-			f->eax = syscall_remove(*arg_ptr[0]);
+			f->eax = filesys_remove(*arg_ptr[0]);
+		
+			//f->eax = syscall_remove(*arg_ptr[0]);
+			
 			lock_release (&lock_sys);
 			break;
 		case SYS_OPEN:
@@ -139,12 +140,13 @@ syscall_handler (struct intr_frame *f)
 			if (!is_valid(*arg_ptr[0]))
 				thread_exit();
 			lock_acquire (&lock_sys);
-			f->eax = syscall_create(*arg_ptr[0], *arg_int[1]);
+			f->eax = filesys_create(*arg_ptr[0], *arg_int[1]);
+			//f->eax = syscall_create(*arg_ptr[0], *arg_int[1]);
 			lock_release (&lock_sys);	
 			break;
 		case SYS_SEEK:
 			lock_acquire(&lock_sys);
-			f->eax = syscall_seek(*arg_int[0], *arg_int[1]);
+			syscall_seek(*arg_int[0], *arg_int[1]);
 			lock_release(&lock_sys);
 			break;
 		case SYS_READ:
@@ -168,7 +170,7 @@ syscall_handler (struct intr_frame *f)
 }
 
 
-void
+ void
 syscall_init (void) 
 {
 	lock_init(&lock_sys);
@@ -218,6 +220,32 @@ void syscall_close(int fd)
 		free(fe);
 		return;
 						
+}
+static void syscall_seek(int fd, unsigned position)
+{
+		struct file *f = file_find(fd);
+		if (f == NULL) 
+				return;
+		file_seek(f, (off_t)position);
+
+}
+
+static int syscall_filesize(int fd)
+{
+		struct file *f = file_find(fd);
+		if(f == NULL) 
+				return -1;
+		else
+				return (int)file_length(f);
+}
+
+static unsigned syscall_tell(int fd)
+{
+		struct file *f = file_find(fd);
+		if( f== NULL)
+				return -1;
+		else
+				return (unsigned) file_tell(f);
 }
 /*
 static int syscall_read(int fd, char* content, unsigned content_size){
