@@ -14,19 +14,17 @@
 
 static void syscall_handler (struct intr_frame *);
 static struct lock lock_sys;
-static void syscall_init(void);
+void syscall_init(void);
 
 static int syscall_exit(int);
 static unsigned syscall_tell(int);
-static bool syscall_remove(const char*);
 static int syscall_open(char*);
 static void syscall_close(int);
 static int syscall_filesize(int);
-static bool syscall_create(const char*, unsigned);
 static void syscall_seek(int, unsigned);
 static int syscall_read(int, char*, unsigned);
 static int syscall_write(int, const char*, unsigned);
-
+static struct file * file_find(int fd);
 
 static bool is_valid(void *p) {
 	if(p != NULL && p < PHYS_BASE && pagedir_get_pages(thread_current()->pagedir, p) != NULL)
@@ -115,7 +113,10 @@ syscall_handler (struct intr_frame *f)
 			if (!is_valid(*arg_ptr[0]))
 				thread_exit();
 			lock_acquire (&lock_sys);
-			f->eax = syscall_remove(*arg_ptr[0]);
+			f->eax = filesys_remove(*arg_ptr[0]);
+		
+			//f->eax = syscall_remove(*arg_ptr[0]);
+			
 			lock_release (&lock_sys);
 			break;
 		case SYS_OPEN:
@@ -139,12 +140,13 @@ syscall_handler (struct intr_frame *f)
 			if (!is_valid(*arg_ptr[0]))
 				thread_exit();
 			lock_acquire (&lock_sys);
-			f->eax = syscall_create(*arg_ptr[0], *arg_int[1]);
+			f->eax = filesys_create(*arg_ptr[0], *arg_int[1]);
+			//f->eax = syscall_create(*arg_ptr[0], *arg_int[1]);
 			lock_release (&lock_sys);	
 			break;
 		case SYS_SEEK:
 			lock_acquire(&lock_sys);
-			f->eax = syscall_seek(*arg_int[0], *arg_int[1]);
+			syscall_seek(*arg_int[0], *arg_int[1]);
 			lock_release(&lock_sys);
 			break;
 		case SYS_READ:
@@ -168,7 +170,7 @@ syscall_handler (struct intr_frame *f)
 }
 
 
-void
+ void
 syscall_init (void) 
 {
 	lock_init(&lock_sys);
@@ -180,7 +182,71 @@ static int syscall_exit(int status) {
 	thread_exit(); // thread_exit -> process_exit
 }
 
-/* syscall read and write - Taeho */
+
+static struct file * file_find(int fd)
+{
+		struct thread *t = thread_current();
+		struct file_elem *fe;
+		struct list_elem *e;
+
+		
+		for(e = list_begin(&t->open_files); e!=list_end(&t->open_files);
+						e = list_next(e))
+		{
+				fe = list_entry(e, struct file_elem, elem);
+				if(fe->fd == fd) return fe->file;
+		}
+			return NULL;
+}
+
+void syscall_close(int fd)
+{
+		struct thread *t = thread_current();
+		struct file_elem *fe;
+		struct list_elem *e;
+		
+		for(e = list_begin(&t->open_files); e!=list_end(&t->open_files);
+						e = list_next(e))
+		{		
+				fe = list_entry(e, struct file_elem, elem);
+				if(fe->fd == fd)
+						break;
+		}
+		if (fe == NULL) 
+				return;
+	
+		file_close(fe->file);
+		list_remove(&fe->elem);
+		free(fe);
+		return;
+						
+}
+static void syscall_seek(int fd, unsigned position)
+{
+		struct file *f = file_find(fd);
+		if (f == NULL) 
+				return;
+		file_seek(f, (off_t)position);
+
+}
+
+static int syscall_filesize(int fd)
+{
+		struct file *f = file_find(fd);
+		if(f == NULL) 
+				return -1;
+		else
+				return (int)file_length(f);
+}
+
+static unsigned syscall_tell(int fd)
+{
+		struct file *f = file_find(fd);
+		if( f== NULL)
+				return -1;
+		else
+				return (unsigned) file_tell(f);
+}
 static int syscall_read(int fd, char* content, unsigned content_size){
 	if(fd == STDIN_FILENO){//standard input stream
 		int i=0;
