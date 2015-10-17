@@ -19,9 +19,15 @@
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
 
+static struct semaphore sema_load;
+static struct lock lock_exec;
+
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 void process_init(void) {
+
+	sema_init(&sema_load, 0);
+	lock_init(&lock_exec);
 
 }
 /* Starts a new thread running a user program loaded from
@@ -44,11 +50,18 @@ process_execute (const char *file_name)
 	// Parse file name
 	file_name = strtok_r(file_name, " ", &ptr);
 
+	lock_acquire(&lock_exec);
+
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
-  return tid;
+	else
+			sema_down(&sema_load);
+
+	lock_release(&lock_exec);
+
+	return tid;
 }
 
 // Parsed arguments are pushed into stack according to calling convention in PPT
