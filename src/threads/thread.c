@@ -201,7 +201,7 @@ thread_create (const char *name, int priority,
 	t->exit_status = -1;
 
 	old_level = intr_disable();
-	list_push_back(&cur->children, &t->child_elem);
+	list_push_back(&cur->child_list, &t->child_elem);
 	intr_set_level(old_level);
 #endif
 
@@ -221,17 +221,7 @@ thread_create (const char *name, int priority,
   sf->ebp = 0;
 
 
-		//child_list initialization
-		struct thread* cur = thread_current();
-		sema_init(&t->sema_wait, 0);
-		sema_init(&t->sema_exit, 0);
-		t->exit_status = -1;
-		t->parent = cur;
 
-		enum intr_level original = intr_disable();
-		list_push_back(&cur->child_list, &t->child_elem);
-		intr_set_level(original);
-		//child_list initialization
 
 
   /* Add to run queue. */
@@ -374,10 +364,10 @@ thread_yield (void)
 		struct thread *thread;
 		struct list_elem *e;
 
-		if(list_empty(&t->children))
+		if(list_empty(&t->child_list))
 			return NULL;
 
-		for(e = list_begin(&t->children); e != list_end(&t->children); e = list_next(e)) {
+		for(e = list_begin(&t->child_list); e != list_end(&t->child_list); e = list_next(e)) {
 			thread = list_entry(e, struct thread, child_elem);
 			if(thread->tid == tid)
 				return thread;
@@ -622,11 +612,6 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&t->lock_list);
 	list_init(&t->child_list);
 
-#ifdef USERPROG
-	list_init(&t->open_files);
-	list_init(&t->children);
-	t->open_file = NULL;
-#endif
 
 
   old_level = intr_disable ();

@@ -180,7 +180,7 @@ process_exit (void)
 		lock_release(l);
 	}
 
-	for(e = list_begin(&cur->children); e != list_end(&cur->children); e = list_next(e)) {
+	for(e = list_begin(&cur->child_list); e != list_end(&cur->child_list); e = list_next(e)) {
 		t = list_entry(e, struct thread, child_elem);
 		t->parent = NULL;
 		sema_up(&t->sema_wait);
