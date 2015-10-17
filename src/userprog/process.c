@@ -134,13 +134,14 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-	struct child* child_process = getChildByTid(child_tid);
-	if(child_process==NULL)	return -1; //if there is no matched child, return -1
-	while(child_process->status == CHILD_WAIT) timer_sleep(1); //wait until the process ends
-
-	int exit_status = child_process->exit_status;
-	list_remove(&child_process->elem);
-	free(child_process);
+	struct thread* target = getChildByTid(thread_current(), child_tid);
+	if(target==NULL)	return -1; //if there is no matched child, return -1
+	
+	sema_down(&target->sema_exit);
+	int exit_status = target->exit_status;
+	
+	sema_up(&target->sema_exit);
+	sema_up(&target->sema_wait);
 
 	return exit_status;
   

@@ -311,7 +311,7 @@ thread_exit (void)
 	intr_disable();
 	struct thread* cur = thread_current();
 	struct thread* child;
-	struct list_elem* elem_iter, elem_end;
+	struct list_elem* elem_iter, *elem_end;
 	elem_iter = list_begin (&cur->child_list);
 	elem_end = list_end(&cur->child_list);
 	while(elem_iter!=elem_end){//remove all of its children
@@ -715,7 +715,7 @@ struct thread* getChildByTid(struct thread* parent, tid_t target){
 		if(target == temp_child->tid) return temp_child;
 	
 		if(!list_empty(&temp_child->child_list)){
-			temp_grand = getChildByTid(temp_child, target);
+			temp_grand = getChildByTid(temp_child, target);//tree structure : recursively find the child thread
 			if(temp_grand != NULL) return temp_grand;
 		}
 
