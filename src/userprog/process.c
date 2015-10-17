@@ -20,7 +20,6 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
-
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -31,7 +30,6 @@ process_execute (const char *file_name)
   char *fn_copy;
   tid_t tid;
 	char *ptr;
-
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
@@ -50,7 +48,7 @@ process_execute (const char *file_name)
 }
 
 // Parsed arguments are pushed into stack according to calling convention in PPT
-void push_arguments(char **parse, int cnt, void **esp) {
+void push_arguments(char** parse, int cnt, void **esp) {
 	int i, len;
 	uint32_t argv_addr[cnt]; // define argv_address
 
@@ -96,8 +94,6 @@ start_process (void *file_name_)
 
 	char *parse[65]; // In pintos, n of 'argv[n]' is limited to (128/2 + 1 == 65) in "init.c"	
 	//initial space handling
-	while(file_name[0]==' ')		file_name++;
-	
 	for(token = strtok_r(file_name, " ", &ptr); token != NULL; token = strtok_r(NULL, " ", &ptr)) {
 		parse[cnt++] = token;
 	}
@@ -108,7 +104,7 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
-	push_arguments(&parse, cnt, &if_.esp);	
+	push_arguments((char**)&parse, cnt, &if_.esp);	
 //	hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
 
   /* If load failed, quit. */
@@ -138,7 +134,16 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  return -1;
+	struct child* child_process = getChildByTid(child_tid);
+	if(child_process==NULL)	return -1; //if there is no matched child, return -1
+	while(child_process->status == CHILD_WAIT) timer_sleep(1); //wait until the process ends
+
+	int exit_status = child_process->exit_status;
+	list_remove(&child_process->elem);
+	free(child_process);
+
+	return exit_status;
+  
 }
 
 /* Free the current process's resources. */

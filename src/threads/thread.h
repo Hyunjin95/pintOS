@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "threads/synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -23,6 +24,14 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+
+/* made by Taeho - this struct represents user program's state.
+	therefore, it should have the elements : list-elem for being managed by child_list in parent thread
+																					 tid_t for identifying its parent
+																					 enum child_status for showing its state
+																					 int exit_status for showing its exit state */
+
+
 
 /* A kernel thread or user process.
 
@@ -97,6 +106,12 @@ struct thread
 	int64_t wait_length;
 	bool wait_flag;	
 
+	struct list child_list;
+	struct list_elem child_elem;
+	struct thread* parent;
+	struct semaphore sema_wait;
+	struct semaphore sema_exit;
+	int exit_status;
 
     struct lock *wait_lock;             /* Lock that the thread waits to acquire */
     struct list lock_list;              /* List of donated locks by other thread */
@@ -151,5 +166,7 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+struct thread* getChildByTid(struct thread* parent, tid_t target);
 
 #endif /* threads/thread.h */

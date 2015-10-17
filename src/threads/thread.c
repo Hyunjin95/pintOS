@@ -203,6 +203,20 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
+
+		//child_list initialization
+		struct thread* cur = thread_current();
+		sema_init(&t->sema_wait, 0);
+		sema_init(&t->sema_exit, 0);
+		t->exit_status = -1;
+		t->parent = cur;
+
+		enum intr_level original = intr_disable();
+		list_push_back(&cur->child_list, &t->child_elem);
+		intr_set_level(original);
+		//child_list initialization
+
+
   /* Add to run queue. */
   thread_unblock (t);
 
@@ -293,6 +307,20 @@ thread_exit (void)
 
 #ifdef USERPROG
   process_exit ();
+	
+	intr_disable();
+	struct thread* cur = thread_current();
+	struct thread* child;
+	struct list_elem* elem_iter, elem_end;
+	elem_iter = list_begin (&cur->child_list);
+	elem_end = list_end(&cur->child_list);
+	while(elem_iter!=elem_end){//remove all of its children
+		child = list_entry(elem_iter, struct thread, child_elem);
+		sema_up(&child->sema_wait);
+		elem_iter = list_next(elem_iter);
+	}
+
+
 #endif
 
   /* Remove thread from all threads list, set our status to dying,
@@ -557,6 +585,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
   t->wait_lock = NULL;
   list_init(&t->lock_list);
+	list_init(&t->child_list);
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
@@ -673,7 +702,28 @@ allocate_tid (void)
 
   return tid;
 }
-
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+struct thread* getChildByTid(struct thread* parent, tid_t target){
+	struct list_elem* list_entry = list_begin(&parent->child_list);
+	struct thread* temp_child;
+	struct thread* temp_grand;
+	while(list_entry != list_end(&parent->child_list)){
+		temp_child = list_entry (list_entry, struct thread, elem);
+		if(target == temp_child->tid) return temp_child;
+	
+		if(!list_empty(&temp_child->child_list)){
+			temp_grand = getChildByTid(temp_child, target);
+			if(temp_grand != NULL) return temp_grand;
+		}
+
+		list_entry = list_next(list_entry);
+	}
+	return NULL;
+
+}
+
+
+
