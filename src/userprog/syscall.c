@@ -29,7 +29,7 @@ static int syscall_write(int, const char*, unsigned);
 
 
 static bool is_valid(void *p) {
-	if(p != NULL && (void *)p < PHYS_BASE && pagedir_get_pages(thread_current()->pagedir, p) != NULL)
+	if(p != NULL && p < PHYS_BASE && pagedir_get_pages(thread_current()->pagedir, p) != NULL)
 		return true;
 	return false;
 }
@@ -41,13 +41,13 @@ syscall_handler (struct intr_frame *f)
 	int nsyscall, argc, i;
 	int *esp = (int *)f -> esp;
 
-	if(!is_valid(esp))
+	if(!is_valid((void*)esp))
 		thread_exit();
 	
 	int *arg_int[3];
 	void **arg_ptr[3];
 
-	nsyscall = *(esp)++;
+	nsyscall = *(esp++);
 
 	switch(nsyscall) {
 		case SYS_HALT:
@@ -77,7 +77,7 @@ syscall_handler (struct intr_frame *f)
 	}
 
 	for(i = 0; i < argc; i++) {
-		if(is_valid(esp+i)) {
+		if(is_valid((void*)(esp+i))) {
 			arg_int[i] = esp + i;
 			arg_ptr[i] = (void **)(esp + i);
 		}
@@ -180,13 +180,38 @@ static int syscall_exit(int status) {
 	thread_exit(); // thread_exit -> process_exit
 }
 
-/*
+/* syscall read and write - Taeho */
 static int syscall_read(int fd, char* content, unsigned content_size){
-	struct file* 
-		
-	
-
-
+	if(fd == STDIN_FILENO){//standard input stream
+		int i=0;
+		for(;i<content_size;i++){
+			content[i] = input_getc();
+		}
+		return i;
+	}else{
+		struct file* f = file_find(fd);
+		if(f != NULL) return file_read(f, content, content_size);
+		else return -1;
+	}
 }
 
-*/
+
+static int syscall_write(int fd, const char* content, unsigned content_size){
+	if(fd == STDOUT_FILENO){//standard output stream
+		const int buf_size = 256;
+		unsigned remains = content_size;
+
+		while(remains > buf_size){
+			putbuf(content, buf_size);
+			content += buf_size;
+			remains -= buf_size;
+		}
+		putbuf(content, remains);
+		return content_size;
+	}else{
+		struct file* f = file_find(fd);
+		if(f == NULL) return -1;
+		return file_write(f, content, content_size);
+	}
+}
+/* syscall read and write - Taeho */
