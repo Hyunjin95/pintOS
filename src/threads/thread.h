@@ -116,12 +116,6 @@ struct thread
 	int64_t wait_length;
 	bool wait_flag;	
 
-	struct list child_list;
-	struct list_elem child_elem;
-	struct thread* parent;
-	struct semaphore sema_wait;
-	struct semaphore sema_exit;
-	int exit_status;
 
     struct lock *wait_lock;             /* Lock that the thread waits to acquire */
     struct list lock_list;              /* List of donated locks by other thread */
@@ -134,7 +128,7 @@ struct thread
 		int exit_status;										/* exit_status */
 		struct semaphore *sema_wait;				/* Semaphore for wait */
 		struct semaphore *sema_exit;				/* Smeaphore for exit */
-		struct list children;								/* List of children of thread */
+		struct list child_list;								/* List of children of thread */
 		struct list_elem child_elem;				/* List element for 'children' list */
 		struct thread *parent;							/* Parent of thread */
 		struct list open_files;							/* List of opened files of thread */
