@@ -98,6 +98,10 @@ thread_init (void)
   list_init (&wait_list);
   list_init (&all_list);
 
+#ifdef USERPROG
+	process_init();
+#endif
+
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
@@ -187,6 +191,19 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+
+#ifdef USERPROG
+	struct thread *cur = thread_current();
+	enum intr_level old_level;
+	sema_init(&t->sema_wait, 0);
+	sema_init(&t->sema_exit, 0);
+	t->parent = cur;
+	t->exit_status = -1;
+
+	old_level = intr_disable();
+	list_push_back(&cur->children, &t->child_elem);
+	intr_set_level(old_level);
+#endif
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -318,10 +335,28 @@ thread_yield (void)
   old_level = intr_disable ();
   if (cur != idle_thread)
       list_insert_ordered(&ready_list, &cur->elem, is_higher_priority, NULL);
-  cur->status = THREAD_READY;
+ 
+	cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
 }
+
+#ifdef USERPROG
+	struct thread *find_thread_tid(struct thread *t, tid_t tid) {
+		struct thread *thread;
+		struct list_elem *e;
+
+		if(list_empty(&t->children))
+			return NULL;
+
+		for(e = list_begin(&t->children); e != list_end(&t->children); e = list_next(e)) {
+			thread = list_entry(e, struct thread, child_elem);
+			if(thread->tid == tid)
+				return thread;
+		}
+		return NULL;
+	}
+#endif
 
 /* function to compare two items of wating thread. just compare the finish time */
 bool is_less_time (const struct list_elem* a, const struct list_elem* b, void *aux UNUSED){
@@ -557,6 +592,13 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
   t->wait_lock = NULL;
   list_init(&t->lock_list);
+
+#ifdef USERPROG
+	list_init(&t->open_files);
+	list_init(&t->children);
+	t->open_file = NULL;
+#endif
+
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

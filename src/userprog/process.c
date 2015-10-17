@@ -17,9 +17,14 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+
+void process_init(void) {
+
+}
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -106,7 +111,8 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
-	push_arguments(&parse, cnt, &if_.esp);	
+	if(success)
+		push_arguments(&parse, cnt, &if_.esp);	
 //	hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
 
   /* If load failed, quit. */
@@ -146,6 +152,34 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+	printf("%S: exit(%d)\n", cur->name, cur->exit_status);
+	struct file_elem *fe;
+	struct list_elem *e;
+	struct thread *t;
+
+	// Close all files.
+	while(!list_empty(&cur->open_files)) {
+		e = list_pop_front(&cur->open_files);
+		fe = list_entry(e, struct file_elem, elem);
+		if(fe && fe->file) {
+			file_close(fe->file);
+			palloc_free_page(fe);
+		}
+	}
+
+	// Release all locks
+	for(e = list_begin(&cur->lock_list); e != list_end(&cur->lock_list); e = list_next(e)) {
+		struct lock *l = list_entry(e, struct lock, elem);
+		lock_release(l);
+	}
+
+	for(e = list_begin(&cur->children); e != list_end(&cur->children); e = list_next(e)) {
+		t = list_entry(e, struct thread, child_elem);
+		t->parent = NULL;
+		sema_up(&t->sema_wait);
+	}
+
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -162,6 +196,17 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+
+	if(cur->open_file) {
+		file_allow_write(cur->open_file);
+		file_close(cur->open_file);
+	}
+
+	if(cur->parent) {
+		list_remove(&cur->child_elem);
+		sema_up(&cur->sema_exit);
+		sema_down(&cur->sema_wait);
+	}
 }
 
 /* Sets up the CPU for running user code in the current
