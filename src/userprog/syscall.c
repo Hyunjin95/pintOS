@@ -26,7 +26,7 @@ static bool syscall_create(const char*, unsigned);
 static void syscall_seek(int, unsigned);
 static int syscall_read(int, char*, unsigned);
 static int syscall_write(int, const char*, unsigned);
-
+static struct file * file_find(int fd);
 
 static bool is_valid(void *p) {
 	if(p != NULL && (void *)p < PHYS_BASE && pagedir_get_pages(thread_current()->pagedir, p) != NULL)
@@ -180,6 +180,45 @@ static int syscall_exit(int status) {
 	thread_exit(); // thread_exit -> process_exit
 }
 
+
+static struct file * file_find(int fd)
+{
+		struct thread *t = thread_current();
+		struct file_elem *fe;
+		struct list_elem *e;
+
+		
+		for(e = list_begin(&t->open_files); e!=list_end(&t->open_files);
+						e = list_next(e))
+		{
+				fe = list_entry(e, struct file_elem, elem);
+				if(fe->fd == fd) return fe->file;
+		}
+			return NULL;
+}
+
+void syscall_close(int fd)
+{
+		struct thread *t = thread_current();
+		struct file_elem *fe;
+		struct list_elem *e;
+		
+		for(e = list_begin(&t->open_files); e!=list_end(&t->open_files);
+						e = list_next(e))
+		{		
+				fe = list_entry(e, struct file_elem, elem);
+				if(fe->fd == fd)
+						break;
+		}
+		if (fe == NULL) 
+				return;
+	
+		file_close(fe->file);
+		list_remove(&fe->elem);
+		free(fe);
+		return;
+						
+}
 /*
 static int syscall_read(int fd, char* content, unsigned content_size){
 	struct file* 
