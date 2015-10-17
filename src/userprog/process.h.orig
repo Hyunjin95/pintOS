@@ -1,0 +1,19 @@
+#ifndef USERPROG_PROCESS_H
+#define USERPROG_PROCESS_H
+
+#include "threads/thread.h"
+
+tid_t process_execute (const char *file_name);
+int process_wait (tid_t);
+void process_exit (void);
+void process_activate (void);
+<<<<<<< HEAD
+void push_arguments(char**, int, void**);
+=======
+void process_init(void);
+int process_file_open(char *);
+struct file *file_find_fd(int);
+void process_file_close(int);
+
+>>>>>>> a414541872f0d1d4df5e870fa521df1ebff56aab
+#endif /* userprog/process.h */

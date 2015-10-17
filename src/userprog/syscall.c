@@ -14,6 +14,19 @@
 
 static void syscall_handler (struct intr_frame *);
 static struct lock lock_sys;
+static void syscall_init(void);
+
+static int syscall_exit(int);
+static unsigned syscall_tell(int);
+static bool syscall_remove(const char*);
+static int syscall_open(char*);
+static void syscall_close(int);
+static int syscall_filesize(int);
+static bool syscall_create(const char*, unsigned);
+static void syscall_seek(int, unsigned);
+static int syscall_read(int, char*, unsigned);
+static int syscall_write(int, const char*, unsigned);
+
 
 static bool is_valid(void *p) {
 	if(p != NULL && (void *)p < PHYS_BASE && pagedir_get_pages(thread_current()->pagedir, p) != NULL)
@@ -21,17 +34,6 @@ static bool is_valid(void *p) {
 	return false;
 }
 
-void
-syscall_init (void) 
-{
-	lock_init(&lock_sys);
-  intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
-}
-
-static int syscall_exit(int status) {
-	thread_current()->exit_status = status;
-	thread_exit(); // thread_exit -> process_exit
-}
 
 static void
 syscall_handler (struct intr_frame *f) 
@@ -55,9 +57,9 @@ syscall_handler (struct intr_frame *f)
 		case SYS_EXEC:
 		case SYS_WAIT:
 		case SYS_TELL:
-		case SYS_CLOSE:
 		case SYS_REMOVE:
 		case SYS_OPEN:
+		case SYS_CLOSE:
 		case SYS_FILESIZE:
 			argc = 1;
 			break;
@@ -109,11 +111,6 @@ syscall_handler (struct intr_frame *f)
 			f->eax = syscall_tell(*arg_int[0]);
 		  lock_release (&lock_sys);
 	    break;
-		case SYS_CLOSE:
-			lock_acquire (&lock_sys);
-			process_file_close(*arg_int[0]);
-			lock_release (&lock_sys);
-			break;
 		case SYS_REMOVE:
 			if (!is_valid(*arg_ptr[0]))
 				thread_exit();
@@ -125,7 +122,12 @@ syscall_handler (struct intr_frame *f)
 			if (!is_valid(*arg_ptr[0]))
 				thread_exit();
 			lock_acquire (&lock_sys);
-			f->eax = process_file_open(*arg_ptr[0]);
+			f->eax = syscall_open(*arg_ptr[0]);
+			lock_release (&lock_sys);
+			break;
+		case SYS_CLOSE:
+			lock_acquire (&lock_sys);
+			syscall_close(*arg_int[0]);
 			lock_release (&lock_sys);
 			break;
 		case SYS_FILESIZE:			
@@ -142,7 +144,7 @@ syscall_handler (struct intr_frame *f)
 			break;
 		case SYS_SEEK:
 			lock_acquire(&lock_sys);
-			f->eax = syscall_read(*arg_int[0], *arg_int[1]);
+			f->eax = syscall_seek(*arg_int[0], *arg_int[1]);
 			lock_release(&lock_sys);
 			break;
 		case SYS_READ:
@@ -166,3 +168,25 @@ syscall_handler (struct intr_frame *f)
 }
 
 
+void
+syscall_init (void) 
+{
+	lock_init(&lock_sys);
+  intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+}
+
+static int syscall_exit(int status) {
+	thread_current()->exit_status = status;
+	thread_exit(); // thread_exit -> process_exit
+}
+
+/*
+static int syscall_read(int fd, char* content, unsigned content_size){
+	struct file* 
+		
+	
+
+
+}
+
+*/
