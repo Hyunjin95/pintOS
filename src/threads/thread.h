@@ -126,8 +126,8 @@ struct thread
     /* Owned by userprog/process.c. && userprog/syscall.c */
     uint32_t *pagedir;                  /* Page directory. */
 		int exit_status;										/* exit_status */
-		struct semaphore *sema_wait;				/* Semaphore for wait */
-		struct semaphore *sema_exit;				/* Smeaphore for exit */
+		struct semaphore sema_wait;				/* Semaphore for wait */
+		struct semaphore sema_exit;				/* Smeaphore for exit */
 		struct list child_list;								/* List of children of thread */
 		struct list_elem child_elem;				/* List element for 'children' list */
 		struct thread *parent;							/* Parent of thread */

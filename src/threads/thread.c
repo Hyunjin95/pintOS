@@ -12,9 +12,9 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "devices/timer.h"
-#ifdef USERPROG
+//#ifdef USERPROG
 #include "userprog/process.h"
-#endif
+//#endif
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -358,7 +358,7 @@ thread_yield (void)
   schedule ();
   intr_set_level (old_level);
 }
-
+/*
 #ifdef USERPROG
 	struct thread *find_thread_tid(struct thread *t, tid_t tid) {
 		struct thread *thread;
@@ -375,7 +375,7 @@ thread_yield (void)
 		return NULL;
 	}
 #endif
-
+*/
 /* function to compare two items of wating thread. just compare the finish time */
 bool is_less_time (const struct list_elem* a, const struct list_elem* b, void *aux UNUSED){
 	struct thread *thread_a = list_entry (a, struct thread, elem);
@@ -610,8 +610,11 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
   t->wait_lock = NULL;
   list_init(&t->lock_list);
-	list_init(&t->child_list);
 
+	#ifdef USERPROG
+	list_init(&t->child_list);
+	list_init(&t->open_files);
+	#endif
 
 
   old_level = intr_disable ();

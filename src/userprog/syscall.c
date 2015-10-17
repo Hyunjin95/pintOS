@@ -70,7 +70,7 @@ syscall_handler (struct intr_frame *f)
 			argc = 3;
 			break;
 
-		deafult:
+		default:
 			thread_exit();
 	}
 
@@ -218,7 +218,7 @@ void syscall_close(int fd)
 		file_close(fe->file);
 		file_allow_write(fe->file);
 		list_remove(&fe->elem);
-		free(fe);
+		free((void*)fe);
 		return;
 						
 }
