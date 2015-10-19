@@ -40,33 +40,52 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
-  tid_t tid;
+	char *fn_copy2;
 	char *ptr;
+  tid_t tid;
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
+  fn_copy2 = palloc_get_page(0);
+
+	if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-	// Parse file name
-	file_name = strtok_r(file_name, " ", &ptr);
+	if (fn_copy2 == NULL)
+    return TID_ERROR;
+  strlcpy (fn_copy2, file_name, PGSIZE);
 
 	lock_acquire(&lock_exec);
 	load_success = false;
 
+//	printf("hello lock done, file name: %s\n", file_name);
+
+  /// Parse file name
+	file_name = strtok_r(fn_copy2, " ", &ptr);
+
+//	printf("hello parse done, parsed name: %s\n", file_name);
+
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+
+//	printf("hello thread_Create done\n");
+
+	palloc_free_page(fn_copy2);
+  if (tid == TID_ERROR) {
+//		printf("hello error\n");
+    palloc_free_page (fn_copy);
+	}
 	else
 	{
+//		printf("hello not error\n");
 			sema_down(&sema_load);
 			if(!load_success)
 					tid = -1;
 	}
 
 	lock_release(&lock_exec);
+//	printf("hello lock release, tid:%d\n\n", tid);
 	return tid;
 }
 
@@ -127,15 +146,14 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
-	if(success)
+	if(success) {
 		push_arguments(&parse, cnt, &if_.esp);	
-//	hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
-
+//		hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
+	}
   /* If load failed, quit. */
-  palloc_free_page (file_name);
+  palloc_free_page (file_name_);
   if (!success) 
     thread_exit ();
-
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -156,19 +174,18 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-	struct thread* target = getChildByTid(thread_current(), child_tid);
+	struct thread* target = find_thread_tid(thread_current(), child_tid);
 	if(target==NULL)	return -1; //if there is no matched child, return -1
 	
 	sema_down(&target->sema_exit);
 	int exit_status = target->exit_status;
-	
+	target->exit_status = -1;
 	sema_up(&target->sema_exit);
 	sema_up(&target->sema_wait);
 
 	return exit_status;
-  
 }
 
 /* Free the current process's resources. */
@@ -178,26 +195,29 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
-	printf("%S: exit(%d)\n", cur->name, cur->exit_status);
+	printf("%s: exit(%d)\n", cur->name, cur->exit_status);
 	struct file_elem *fe;
 	struct list_elem *e;
 	struct thread *t;
 
-	// Close all files.
+	
+	/// Close all files.
 	while(!list_empty(&cur->open_files)) {
 		e = list_pop_front(&cur->open_files);
 		fe = list_entry(e, struct file_elem, elem);
 		if(fe && fe->file) {
 			file_close(fe->file);
-			palloc_free_page(fe);
+			free(fe);
 		}
 	}
+
 
 	// Release all locks
 	for(e = list_begin(&cur->lock_list); e != list_end(&cur->lock_list); e = list_next(e)) {
 		struct lock *l = list_entry(e, struct lock, elem);
 		lock_release(l);
 	}
+
 
 	for(e = list_begin(&cur->child_list); e != list_end(&cur->child_list); e = list_next(e)) {
 		t = list_entry(e, struct thread, child_elem);
@@ -224,14 +244,13 @@ process_exit (void)
     }
 
 	if(cur->open_file) {
-		file_allow_write(cur->open_file);
 		file_close(cur->open_file);
 	}
 
 	if(cur->parent) {
-		list_remove(&cur->child_elem);
 		sema_up(&cur->sema_exit);
 		sema_down(&cur->sema_wait);
+		list_remove(&cur->child_elem);
 	}
 }
 
@@ -438,7 +457,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
 	}
 	else{
 		file_close(file);
-		
 	}
 
 	sema_up(&sema_load);	

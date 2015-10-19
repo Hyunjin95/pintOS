@@ -156,6 +156,7 @@ tid_t thread_create (const char *name, int priority, thread_func *, void *);
 void thread_block (void);
 void thread_unblock (struct thread *);
 
+struct thread *find_thread_tid(struct thread *, tid_t);
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);
@@ -179,7 +180,5 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
-
-struct thread* getChildByTid(struct thread* parent, tid_t target);
 
 #endif /* threads/thread.h */

@@ -39,7 +39,7 @@ syscall_handler (struct intr_frame *f)
 	int nsyscall, argc, i;
 	int *esp = (int *)f -> esp;
 
-	if(!is_valid((void*)esp))
+	if(!is_valid(esp))
 		thread_exit();
 	
 	int *arg_int[3];
@@ -75,7 +75,7 @@ syscall_handler (struct intr_frame *f)
 	}
 
 	for(i = 0; i < argc; i++) {
-		if(is_valid((void*)(esp+i))) {
+		if(is_valid((esp+i))) {
 			arg_int[i] = esp + i;
 			arg_ptr[i] = (void **)(esp + i);
 		}
@@ -97,11 +97,15 @@ syscall_handler (struct intr_frame *f)
 	  case SYS_EXEC:
 	    if (!is_valid(*arg_ptr[0]))
 	      thread_exit();
+//			printf("hello exec\n");
 			lock_acquire (&lock_sys);
+//			printf("hello exec start\n");
 			f->eax = process_execute(*arg_ptr[0]);
+//			printf("hello exec done\n");
 			lock_release (&lock_sys);
 			break;
 		case SYS_WAIT:
+//			printf("hello wait\n");
 			f->eax = process_wait(*arg_int[0]);
 			break;
 		case SYS_TELL:
@@ -114,9 +118,6 @@ syscall_handler (struct intr_frame *f)
 				thread_exit();
 			lock_acquire (&lock_sys);
 			f->eax = filesys_remove(*arg_ptr[0]);
-		
-			//f->eax = syscall_remove(*arg_ptr[0]);
-			
 			lock_release (&lock_sys);
 			break;
 		case SYS_OPEN:
@@ -128,6 +129,7 @@ syscall_handler (struct intr_frame *f)
 			break;
 		case SYS_CLOSE:
 			lock_acquire (&lock_sys);
+//			printf("hello close call!\n");
 			syscall_close(*arg_int[0]);
 			lock_release (&lock_sys);
 			break;
@@ -141,7 +143,6 @@ syscall_handler (struct intr_frame *f)
 				thread_exit();
 			lock_acquire (&lock_sys);
 			f->eax = filesys_create(*arg_ptr[0], *arg_int[1]);
-			//f->eax = syscall_create(*arg_ptr[0], *arg_int[1]);
 			lock_release (&lock_sys);	
 			break;
 		case SYS_SEEK:
@@ -201,24 +202,18 @@ static struct file * file_find(int fd)
 
 void syscall_close(int fd)
 {
-		struct thread *t = thread_current();
-		struct file_elem *fe;
-		struct list_elem *e;
+//		printf("hello here is syscall_close\n");
 		
-		for(e = list_begin(&t->open_files); e!=list_end(&t->open_files);
-						e = list_next(e))
-		{		
-				fe = list_entry(e, struct file_elem, elem);
-				if(fe->fd == fd)
-						break;
-		}
-		if (fe == NULL) 
+		struct file_elem *fe = file_find(fd);
+	
+		if (fe == NULL || fe->fd != fd)
 				return;
 	
+//		printf("hello file close done. fd: %d\n", fe->fd);
+		
 		file_close(fe->file);
-		file_allow_write(fe->file);
 		list_remove(&fe->elem);
-		free((void*)fe);
+		free(fe);
 		return;
 						
 }
@@ -250,11 +245,11 @@ static unsigned syscall_tell(int fd)
 }
 static int syscall_read(int fd, char* content, unsigned content_size){
 	if(fd == STDIN_FILENO){//standard input stream
-		int i=0;
+		unsigned i=0;
 		for(;i<content_size;i++){
 			content[i] = input_getc();
 		}
-		return i;
+		return (int)i;
 	}else{
 		struct file* f = file_find(fd);
 		if(f != NULL) return file_read(f, content, content_size);
@@ -269,6 +264,7 @@ static int syscall_open(char *filename){
 	int fd;
 
 	struct file *file = filesys_open(filename);
+
 	if(file == NULL) {
 		/* Error occured while opening file */
 		return -1;
@@ -278,7 +274,8 @@ static int syscall_open(char *filename){
 		le = list_back(&cur->open_files);
 		fe_prev = list_entry(le, struct file_elem, elem);
 		fd = fe_prev->fd + 1;
-	} else {
+	}
+	else {
 		fd = 3;
 	}
 
@@ -293,14 +290,17 @@ static int syscall_open(char *filename){
 	fe->file = file;
 	list_push_back(&cur->open_files, &fe->elem);
 
+//	printf("hello file open done. name: %s, fd: %d\n\n", filename, fe->fd);
+
 	return fd;
 }
 
 
 
 static int syscall_write(int fd, const char* content, unsigned content_size){
+//	printf("hello write\n");
 	if(fd == STDOUT_FILENO){//standard output stream
-		const int buf_size = 256;
+		const unsigned buf_size = 256;
 		unsigned remains = content_size;
 
 		while(remains > buf_size){
@@ -309,8 +309,10 @@ static int syscall_write(int fd, const char* content, unsigned content_size){
 			remains -= buf_size;
 		}
 		putbuf(content, remains);
-		return content_size;
-	}else{
+//		printf("hello write done\n");
+		return (int)content_size;
+	}
+	else{
 		struct file* f = file_find(fd);
 		if(f == NULL) return -1;
 		return file_write(f, content, content_size);

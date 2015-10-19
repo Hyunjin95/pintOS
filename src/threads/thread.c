@@ -314,20 +314,6 @@ thread_exit (void)
 
 #ifdef USERPROG
   process_exit ();
-	
-	intr_disable();
-	struct thread* cur = thread_current();
-	struct thread* child;
-	struct list_elem* elem_iter, *elem_end;
-	elem_iter = list_begin (&cur->child_list);
-	elem_end = list_end(&cur->child_list);
-	while(elem_iter!=elem_end){//remove all of its children
-		child = list_entry(elem_iter, struct thread, child_elem);
-		sema_up(&child->sema_wait);
-		elem_iter = list_next(elem_iter);
-	}
-
-
 #endif
 
   /* Remove thread from all threads list, set our status to dying,
@@ -358,7 +344,7 @@ thread_yield (void)
   schedule ();
   intr_set_level (old_level);
 }
-/*
+
 #ifdef USERPROG
 	struct thread *find_thread_tid(struct thread *t, tid_t tid) {
 		struct thread *thread;
@@ -375,7 +361,7 @@ thread_yield (void)
 		return NULL;
 	}
 #endif
-*/
+
 /* function to compare two items of wating thread. just compare the finish time */
 bool is_less_time (const struct list_elem* a, const struct list_elem* b, void *aux UNUSED){
 	struct thread *thread_a = list_entry (a, struct thread, elem);
@@ -735,25 +721,3 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
-#ifdef USERPROG
-struct thread* getChildByTid(struct thread* parent, tid_t target){
-	struct list_elem* list_entry = list_begin(&parent->child_list);
-	struct thread* temp_child;
-	struct thread* temp_grand;
-	while(list_entry != list_end(&parent->child_list)){
-		temp_child = list_entry (list_entry, struct thread, elem);
-		if(target == temp_child->tid) return temp_child;
-	
-		if(!list_empty(&temp_child->child_list)){
-			temp_grand = getChildByTid(temp_child, target);//tree structure : recursively find the child thread
-			if(temp_grand != NULL) return temp_grand;
-		}
-
-		list_entry = list_next(list_entry);
-	}
-	return NULL;
-
-}
-
-#endif
-
