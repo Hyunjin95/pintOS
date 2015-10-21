@@ -9,8 +9,4 @@ void process_exit (void);
 void process_activate (void);
 void push_arguments(char**, int, void**);
 void process_init(void);
-int process_file_open(char *);
-struct file *file_find_fd(int);
-void process_file_close(int);
-
 #endif /* userprog/process.h */

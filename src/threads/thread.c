@@ -107,6 +107,10 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+
+#ifdef USERPROG
+	process_create(initial_thread);
+#endif
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -193,16 +197,7 @@ thread_create (const char *name, int priority,
   tid = t->tid = allocate_tid ();
 
 #ifdef USERPROG
-	struct thread *cur = thread_current();
-	enum intr_level old_level;
-	sema_init(&t->sema_wait, 0);
-	sema_init(&t->sema_exit, 0);
-	t->parent = cur;
-	t->exit_status = -1;
-
-	old_level = intr_disable();
-	list_push_back(&cur->child_list, &t->child_elem);
-	intr_set_level(old_level);
+	process_create(t);
 #endif
 
   /* Stack frame for kernel_thread(). */
@@ -220,10 +215,6 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
-
-
-
-
   /* Add to run queue. */
   thread_unblock (t);
 
@@ -232,6 +223,30 @@ thread_create (const char *name, int priority,
 
   return tid;
 }
+
+#ifdef USERPROG
+void process_create(struct thread *t) {
+	struct thread *cur = thread_current();
+	enum intr_level old_level;
+	
+	old_level = intr_disable();
+
+	// initialize semaphore
+	sema_init(&t->sema_wait, 0);
+	sema_init(&t->sema_exit, 0);
+
+	if(t == initial_thread)
+		t->parent = NULL;
+	else {
+		t->parent = cur;
+		list_push_back(&cur->child_list, &t->child_elem);
+	}
+
+	t->exit_status = -1;
+
+	intr_set_level(old_level);
+}
+#endif
 
 /* Puts the current thread to sleep.  It will not be scheduled
    again until awoken by thread_unblock().
@@ -305,6 +320,21 @@ thread_tid (void)
   return thread_current ()->tid;
 }
 
+#ifdef USERPROG
+void set_parent_init_thread(void) {
+	struct list_elem *e;
+	struct thread *t;
+	struct thread *cur = thread_current();
+
+	// Set parent of children of current to initial_thread.
+	for(e = list_begin(&cur->child_list); e != list_end(&cur->child_list); e = list_next(e)) {
+		t = list_entry(e, struct thread, child_elem);
+		t->parent = initial_thread;
+		sema_up(&t->sema_wait);
+	}
+}
+#endif
+
 /* Deschedules the current thread and destroys it.  Never
    returns to the caller. */
 void
@@ -346,6 +376,7 @@ thread_yield (void)
 }
 
 #ifdef USERPROG
+// Find child thread with tid.
 	struct thread *find_thread_tid(struct thread *t, tid_t tid) {
 		struct thread *thread;
 		struct list_elem *e;

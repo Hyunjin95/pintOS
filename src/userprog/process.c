@@ -19,19 +19,25 @@
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
 
+
+// Semaphore for load
 static struct semaphore sema_load;
+// Lock for execution
 static struct lock lock_exec;
+// which load success or not.
 static bool load_success;
 
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
-void process_init(void) {
 
+
+// Initialize lock, semaphore.
+void process_init(void) {
 	sema_init(&sema_load, 0);
 	lock_init(&lock_exec);
-
 }
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -52,6 +58,8 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+	// Make two copy of file_name and execute strtok_r with this copy.
+  // strtok_r changes original file_name(in exec-arg test)
 	if (fn_copy2 == NULL)
     return TID_ERROR;
   strlcpy (fn_copy2, file_name, PGSIZE);
@@ -59,33 +67,25 @@ process_execute (const char *file_name)
 	lock_acquire(&lock_exec);
 	load_success = false;
 
-//	printf("hello lock done, file name: %s\n", file_name);
-
-  /// Parse file name
+  /// Split file name.
 	file_name = strtok_r(fn_copy2, " ", &ptr);
-
-//	printf("hello parse done, parsed name: %s\n", file_name);
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
 
-//	printf("hello thread_Create done\n");
-
+	// Free second copy. (to pass 'multi-oom' test)
 	palloc_free_page(fn_copy2);
-  if (tid == TID_ERROR) {
-//		printf("hello error\n");
+  
+	if (tid == TID_ERROR)
     palloc_free_page (fn_copy);
-	}
 	else
 	{
-//		printf("hello not error\n");
 			sema_down(&sema_load);
 			if(!load_success)
 					tid = -1;
 	}
 
 	lock_release(&lock_exec);
-//	printf("hello lock release, tid:%d\n\n", tid);
 	return tid;
 }
 
@@ -134,7 +134,8 @@ start_process (void *file_name_)
 	char *token, *ptr;
 	int cnt = 0;
 
-	char *parse[65]; // In pintos, n of 'argv[n]' is limited to (128/2 + 1 == 65) in "init.c"	
+	char *parse[65]; // In pintos, n of 'argv[n]' is limited to (128/2 + 1 == 65) in "init.c"
+
 	//initial space handling
 	for(token = strtok_r(file_name, " ", &ptr); token != NULL; token = strtok_r(NULL, " ", &ptr)) {
 		parse[cnt++] = token;
@@ -146,14 +147,18 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
-	if(success) {
+
+	sema_up(&sema_load);	
+	
+	if(success)  // Push arguments only if success.
 		push_arguments(&parse, cnt, &if_.esp);	
-//		hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
-	}
-  /* If load failed, quit. */
+	
+ 
+	/* If load failed, quit. */
   palloc_free_page (file_name_);
   if (!success) 
     thread_exit ();
+	
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -179,10 +184,15 @@ process_wait (tid_t child_tid)
 	struct thread* target = find_thread_tid(thread_current(), child_tid);
 	if(target==NULL)	return -1; //if there is no matched child, return -1
 	
+	// wait for child's exit.
 	sema_down(&target->sema_exit);
 	int exit_status = target->exit_status;
+	
+	// These two lines are for multi wait.
 	target->exit_status = -1;
 	sema_up(&target->sema_exit);
+
+	// Now up child's wait semaphore.
 	sema_up(&target->sema_wait);
 
 	return exit_status;
@@ -199,7 +209,6 @@ process_exit (void)
 	struct file_elem *fe;
 	struct list_elem *e;
 	struct thread *t;
-
 	
 	/// Close all files.
 	while(!list_empty(&cur->open_files)) {
@@ -210,21 +219,15 @@ process_exit (void)
 			free(fe);
 		}
 	}
-
-
+	
 	// Release all locks
 	for(e = list_begin(&cur->lock_list); e != list_end(&cur->lock_list); e = list_next(e)) {
 		struct lock *l = list_entry(e, struct lock, elem);
 		lock_release(l);
 	}
-
-
-	for(e = list_begin(&cur->child_list); e != list_end(&cur->child_list); e = list_next(e)) {
-		t = list_entry(e, struct thread, child_elem);
-		t->parent = NULL;
-		sema_up(&t->sema_wait);
-	}
-
+	
+	// Make parent of curr->child to initial_thread.
+	set_parent_init_thread();
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -243,12 +246,15 @@ process_exit (void)
       pagedir_destroy (pd);
     }
 
+	// If there is open file, then close.
 	if(cur->open_file) {
 		file_close(cur->open_file);
 	}
 
 	if(cur->parent) {
+		// Unblock parent
 		sema_up(&cur->sema_exit);
+		// Wait parent to up semaphore..
 		sema_down(&cur->sema_wait);
 		list_remove(&cur->child_elem);
 	}
@@ -450,17 +456,15 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-	if(success){
+		if(success){
 			file_deny_write(file);
 			t->open_file = file;
 			load_success = true;
-	}
-	else{
-		file_close(file);
-	}
-
-	sema_up(&sema_load);	
-  return success;
+		}
+		else
+			file_close(file);
+	
+  	return success;
 }
 
 /* load() helpers. */
