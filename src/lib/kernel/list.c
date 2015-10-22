@@ -56,6 +56,16 @@ is_tail (struct list_elem *elem)
   return elem != NULL && elem->prev != NULL && elem->next == NULL;
 }
 
+// If the list contains elem, return true. Otherwise return false.
+bool is_in_list(struct list *list, struct list_elem *elem) {
+    struct list_elem *e;
+
+    for(e = list_begin(list); e != list_end(list); e = list_next(e)) {
+        if(e == elem) return true;
+    }
+    return false;
+}
+
 /* Initializes LIST as an empty list. */
 void
 list_init (struct list *list)
