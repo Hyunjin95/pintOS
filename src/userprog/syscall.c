@@ -471,6 +471,7 @@ static int syscall_write(int fd, const char* content, unsigned content_size){
 
 /* syscall read and write - Taeho */
 
+// Chnage current working directory.
 static bool syscall_chdir(const char *dir_path) {
 	char *token, *ptr;
 	struct inode *inode = NULL;
@@ -478,11 +479,13 @@ static bool syscall_chdir(const char *dir_path) {
 	struct thread *curr = thread_current();
 
 
+	// Absolute path.
 	if(dir_path[0] == '/') {
 		dir_close(curr->dir);
 		curr->dir = dir_open_root();
 	}
 
+	// Parse the 'path'
 	for(token = strtok_r(dir_path, "/", &ptr); token != NULL; token = strtok_r(NULL, "/", &ptr)) {
 		if(!dir_lookup(curr->dir, token, &inode)) {
 			success = false;
@@ -491,9 +494,11 @@ static bool syscall_chdir(const char *dir_path) {
 		dir_close(curr->dir);
 		curr->dir = dir_open(inode);
 	}
+
 	return success;
 }
 
+// Make new directory.
 static bool syscall_mkdir(const char *dir_path) {
 	struct thread *curr = thread_current();
 	char name[NAME_MAX + 1];
@@ -503,13 +508,15 @@ static bool syscall_mkdir(const char *dir_path) {
 	char *token, *token2, *ptr;
 	bool success = true;
 
+	// Absolute path
 	if(dir_name[0] == '/')
 		open_dir = dir_open_root();
-	else
+	else // Relative path
 		open_dir = dir_reopen(curr->dir);
 
 	token = strtok_r(dir_name, "/", &ptr);
 
+	// Parse the 'path'
 	for(token2 = strtok_r(NULL, "/", &ptr); token2 != NULL; token2 = strtok_r(NULL, "/", &ptr)) {
 		struct inode *inode = NULL;
 		success = dir_lookup(open_dir, token, &inode);
@@ -525,6 +532,7 @@ static bool syscall_mkdir(const char *dir_path) {
 
 	strlcpy(name, token, sizeof name);
 
+	// create new directory. Simliar to 'filesys_create'
 	block_sector_t sector = 0;
 	success = (open_dir != NULL
 						&& free_map_allocate(1, &sector)
@@ -538,6 +546,7 @@ static bool syscall_mkdir(const char *dir_path) {
 	return success;
 }
 
+// Read one directory entry and save its name to NAME.
 static bool syscall_readdir(int fd, char *name) {
 	if(fd != 0 && fd != 1) {
 		struct thread *curr = thread_current();
@@ -552,6 +561,7 @@ static bool syscall_readdir(int fd, char *name) {
 		return false;
 }
 
+// Return true if directory, false if file.
 static bool syscall_isdir(int fd) {
 	if(fd < 2)
 		return false;
@@ -567,6 +577,7 @@ static bool syscall_isdir(int fd) {
 		return false;
 }
 
+// Return inode sector number of (file or directory).
 static int syscall_inumber(int fd) {
 	struct file_elem *fe = file_elem_find(fd);
 

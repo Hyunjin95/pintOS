@@ -55,9 +55,10 @@ filesys_create (const char *name_, off_t initial_size)
 	struct thread *curr = thread_current();
 	struct dir *dir;
 
+	// Absolute path
 	if(name[0] == '/' || curr->dir == NULL) {
 		dir = dir_open_root();
-	}
+	} // Relative path
 	else {
 		dir = dir_reopen(curr->dir);
 	}
@@ -68,6 +69,7 @@ filesys_create (const char *name_, off_t initial_size)
 	struct inode *inode = NULL;
 	bool success = true;
 
+	// Parse the path
 	token = strtok_r(name, "/", &ptr);
 	for(token2 = strtok_r(NULL, "/", &ptr); token2 != NULL; token2 = strtok_r(NULL, "/", &ptr)) {
 		success = dir_lookup(dir, token, &inode);
@@ -120,6 +122,7 @@ filesys_open (const char *name)
   return file_open (inode);
 }
 
+// Open 'file' if not isdir, otherwise open 'directory'.
 struct file_elem *
 filesys_open_file(const char *name_) {
 	char name[strlen(name_) + 1];
@@ -128,9 +131,10 @@ filesys_open_file(const char *name_) {
 	struct thread *curr = thread_current();
 	struct dir *dir;
 
+	// Absolute path
 	if(name[0] == '/')
 		dir = dir_open_root();
-	else
+	else // Relative path
 		dir = dir_reopen(curr->dir);
 
 	// Parse name
@@ -149,6 +153,7 @@ filesys_open_file(const char *name_) {
 		token = token2;
 	}
 
+	// Root directory case.
 	if(token == NULL) {
 		inode = inode_open (ROOT_DIR_SECTOR);
 	}
@@ -184,15 +189,17 @@ filesys_remove (const char *name_)
 	struct thread *curr = thread_current();
 	struct dir *dir;
 
+	// Absolute path
 	if(name[0] == '/')
 		dir = dir_open_root();
-	else
+	else // Relative path
 		dir = dir_reopen(curr->dir);
 
 	bool success = false;
 	char *token, *token2, *ptr;
 	struct inode *inode = NULL;
 
+	// Parse name
 	token = strtok_r(name, "/", &ptr);
 	for(token2 = strtok_r(NULL, "/", &ptr); token2 != NULL; token2 = strtok_r(NULL, "/", &ptr)) {
 		success = dir_lookup(dir, token, &inode);

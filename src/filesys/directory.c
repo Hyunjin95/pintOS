@@ -29,6 +29,7 @@ dir_create (block_sector_t sector, block_sector_t parent, size_t entry_cnt)
   if(inode_create (sector, entry_cnt * sizeof (struct dir_entry), true)) {
 		struct dir *dir = dir_open(inode_open(sector));
 
+		// '.' is new directory itself, ".." is parent directory of new directory.
 		dir_add(dir, ".", sector);
 		dir_add(dir, "..", parent);
 		dir_close(dir);
@@ -202,6 +203,7 @@ dir_remove (struct dir *dir, const char *name)
   ASSERT (name != NULL);
 	lock_acquire(inode_lock(dir->inode));
 
+	// Root directory 
 	if(strcmp(name, "/") == 0)
 		goto done;
 
@@ -216,10 +218,12 @@ dir_remove (struct dir *dir, const char *name)
 
 	bool isdir = inode_isdir(inode);
 
+	// Open by other process.
 	if(inode_open_cnt(inode) > 1 && isdir)
 		goto done;
 	
 	bool isempty = true;
+
 	if(isdir) {
 		for(ofs2 = 0; inode_read_at(inode, &e2, sizeof e2, ofs2) == sizeof e2; ofs2 += sizeof e2) {
 			if(e2.in_use && strcmp(".", e2.name) != 0 && strcmp("..", e2.name) != 0) {
@@ -229,6 +233,7 @@ dir_remove (struct dir *dir, const char *name)
 		}
 	}
 
+	// Not empty
 	if(!isempty && isdir)
 		goto done;
 
@@ -262,6 +267,7 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
       if (e.in_use)
         {
           strlcpy (name, e.name, NAME_MAX + 1);
+					// Ignore "." and ".."
 					if(strcmp(".", e.name) == 0 || strcmp("..", e.name) == 0)
 						continue;
 					lock_release(inode_lock(dir->inode));
@@ -272,6 +278,7 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
   return false;
 }
 
+// Get dir->inode->dir_lock.
 struct lock *dir_lock(struct dir *dir) {
 	return inode_lock(dir->inode);
 }

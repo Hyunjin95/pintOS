@@ -48,7 +48,7 @@ struct inode
     bool removed;                       /* True if deleted, false otherwise. */
     int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
     struct lock dir_lock;								/* lock for direcotry synch */
-		struct lock expand_lock;						/* lock for expand synch */
+		struct lock expand_lock;						/* lock for file size expand synch */
 		struct inode_disk data;             /* Inode content. */
   };
 
@@ -592,6 +592,7 @@ inode_length (const struct inode *inode)
   return length;
 }
 
+// Return true if directory, false if file.
 bool
 inode_isdir(const struct inode *inode) {
 	struct inode_disk *disk_inode = calloc(1, BLOCK_SECTOR_SIZE);
@@ -605,11 +606,13 @@ inode_isdir(const struct inode *inode) {
 	return result;
 }
 
+// Return open count of inode.
 int
 inode_open_cnt(const struct inode *inode) {
 	return inode->open_cnt;
 }
 
+// Return dir_lock of inode.
 struct lock *
 inode_lock(const struct inode *inode) {
 	return &inode->dir_lock;

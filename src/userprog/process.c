@@ -152,6 +152,7 @@ start_process (void *file_name_)
 	
 	struct thread *curr = thread_current();
 	
+	// Set current working directory
 	if(curr->parent != NULL) {
 		if(curr->parent->dir != NULL) {
 			curr->dir = dir_reopen(curr->parent->dir);
