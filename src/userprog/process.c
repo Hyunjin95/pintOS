@@ -150,6 +150,20 @@ start_process (void *file_name_)
 
 	sema_up(&sema_load);	
 	
+	struct thread *curr = thread_current();
+	
+	if(curr->parent != NULL) {
+		if(curr->parent->dir != NULL) {
+			curr->dir = dir_reopen(curr->parent->dir);
+		}
+		else {
+			curr->dir = dir_open_root();
+		}
+	}
+	else {
+		curr->dir = dir_open_root();
+	}	
+
 	if(success)  // Push arguments only if success.
 		push_arguments(&parse, cnt, &if_.esp);	
 	

@@ -11,6 +11,8 @@
 #include "threads/synch.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "filesys/directory.h"
+#include "filesys/inode.h"
 #include "threads/malloc.h"
 
 static void syscall_handler (struct intr_frame *);
@@ -25,7 +27,13 @@ static int syscall_filesize(int);
 static void syscall_seek(int, unsigned);
 static int syscall_read(int, char*, unsigned);
 static int syscall_write(int, const char*, unsigned);
+static bool syscall_chdir(const char *);
+static bool syscall_mkdir(const char *);
+static bool syscall_readdir(int, char *);
+static bool syscall_isdir(int);
+static int syscall_inumber(int);
 static struct file * file_find(int fd);
+static struct file_elem * file_elem_find(int fd);
 
 // Verify if a requested pointer is valid.
 static bool is_valid(void *p) {
@@ -185,7 +193,6 @@ syscall_handler (struct intr_frame *f)
 		for(i = 0; i < 2; i++) {
 			if(is_valid((esp+i))) {
 				arg_int[i] = esp + i;
-				arg_ptr[i] = (void **)(esp + i);
 			}
 			else thread_exit();
 		}
@@ -224,6 +231,76 @@ syscall_handler (struct intr_frame *f)
 
 		lock_acquire(&lock_sys);
 		f->eax = syscall_write(*arg_int[0], *arg_ptr[1], *arg_int[2]);
+		lock_release(&lock_sys);
+	}
+	else if(nsyscall == SYS_CHDIR) {
+		for(i = 0; i < 1; i++) {
+			if(is_valid((esp+i))) {
+				arg_ptr[i] = (void **)(esp + i);
+			}
+			else thread_exit();
+		}
+		
+		if(!is_valid(*arg_ptr[0]))
+			thread_exit();
+
+		lock_acquire(&lock_sys);
+		f->eax = syscall_chdir(*arg_ptr[0]);
+		lock_release(&lock_sys);
+	}
+	else if(nsyscall == SYS_MKDIR) {
+		for(i = 0; i < 1; i++) {
+			if(is_valid((esp+i))) {
+				arg_ptr[i] = (void **)(esp + i);
+			}
+			else thread_exit();
+		}
+		
+		if(!is_valid(*arg_ptr[0]))
+			thread_exit();
+
+		lock_acquire(&lock_sys);
+		f->eax = syscall_mkdir(*arg_ptr[0]);
+		lock_release(&lock_sys);
+	}
+	else if(nsyscall == SYS_READDIR) {
+		for(i = 0; i < 2; i++) {
+			if(is_valid((esp+i))) {
+				arg_int[i] = esp + i;
+				arg_ptr[i] = (void **)(esp + i);
+			}
+			else thread_exit();
+		}
+
+		if(!is_valid(*arg_ptr[1]))
+			thread_exit();
+
+		lock_acquire(&lock_sys);
+		f->eax = syscall_readdir(*arg_int[0], *arg_ptr[1]);
+		lock_release(&lock_sys);
+	}
+	else if(nsyscall == SYS_ISDIR) {
+		for(i = 0; i < 1; i++) {
+			if(is_valid((esp+i))) {
+				arg_int[i] = esp + i;
+			}
+			else thread_exit();
+		}
+
+		lock_acquire(&lock_sys);
+		f->eax = syscall_isdir(*arg_int[0]);
+		lock_release(&lock_sys);
+	}
+	else if(nsyscall == SYS_INUMBER) {
+		for(i = 0; i < 1; i++) {
+			if(is_valid((esp+i))) {
+				arg_int[i] = esp + i;
+			}
+			else thread_exit();
+		}
+
+		lock_acquire(&lock_sys);
+		f->eax = syscall_inumber(*arg_int[0]);
 		lock_release(&lock_sys);
 	}
 	else
@@ -282,7 +359,11 @@ void syscall_close(int fd)
 		if (fe == NULL || fe->fd != fd)
 				return;
 	
-		file_close(fe->file); // In file close, file_allow_write() and free(fe->file) will be executed.
+		if(fe->file != NULL)
+			file_close(fe->file); // In file close, file_allow_write() and free(fe->file) will be executed.
+		else
+			dir_close(fe->dir);
+
 		list_remove(&fe->elem);
 		free(fe); // free 'file struct'
 		return;
@@ -329,14 +410,20 @@ static int syscall_read(int fd, char* content, unsigned content_size){
 }
 
 static int syscall_open(char *filename){
+	if(filename == NULL || strlen(filename) == 0)
+		return -1;
+
 	struct thread *cur = thread_current ();
 	struct file_elem *fe, *fe_prev;
 	struct list_elem *le;
 	int fd;
 
-	struct file *file = filesys_open(filename);
+	fe = filesys_open_file(filename);
 
-	if(file == NULL) {
+	if(fe == NULL)
+		return -1;
+
+	if(fe->file == NULL && fe->dir == NULL) {
 		/* Error occured while opening file */
 		return -1;
 	}
@@ -348,19 +435,13 @@ static int syscall_open(char *filename){
 		fd = fe_prev->fd + 1;
 	}
 	else {
-		// 0 = stdin, 1 = stdout, 2 = stderr
-		fd = 3;
-	}
-
-	fe = (struct file_elem*)calloc(1, sizeof(struct thread));
-	if(fe == NULL) {
-		/* Error occured while allocating thread */
-		return -1;
+		// 0 = stdin, 1 = stdout
+		fd = 2;
 	}
 
 	/* Add information for the opened file */
 	fe->fd = fd;
-	fe->file = file;
+	fe->pos = 0;
 	list_push_back(&cur->open_files, &fe->elem);
 
 	return fd;
@@ -387,4 +468,115 @@ static int syscall_write(int fd, const char* content, unsigned content_size){
 		return file_write(f, content, content_size);
 	}
 }
+
 /* syscall read and write - Taeho */
+
+static bool syscall_chdir(const char *dir_path) {
+	char *token, *ptr;
+	struct inode *inode = NULL;
+	bool success = true;
+	struct thread *curr = thread_current();
+
+
+	if(dir_path[0] == '/') {
+		dir_close(curr->dir);
+		curr->dir = dir_open_root();
+	}
+
+	for(token = strtok_r(dir_path, "/", &ptr); token != NULL; token = strtok_r(NULL, "/", &ptr)) {
+		if(!dir_lookup(curr->dir, token, &inode)) {
+			success = false;
+			break;
+		}
+		dir_close(curr->dir);
+		curr->dir = dir_open(inode);
+	}
+	return success;
+}
+
+static bool syscall_mkdir(const char *dir_path) {
+	struct thread *curr = thread_current();
+	char name[NAME_MAX + 1];
+	char dir_name[strlen(dir_path) + 1];
+	strlcpy(dir_name, dir_path, strlen(dir_path)+1);
+	struct dir *open_dir;
+	char *token, *token2, *ptr;
+	bool success = true;
+
+	if(dir_name[0] == '/')
+		open_dir = dir_open_root();
+	else
+		open_dir = dir_reopen(curr->dir);
+
+	token = strtok_r(dir_name, "/", &ptr);
+
+	for(token2 = strtok_r(NULL, "/", &ptr); token2 != NULL; token2 = strtok_r(NULL, "/", &ptr)) {
+		struct inode *inode = NULL;
+		success = dir_lookup(open_dir, token, &inode);
+		if(!success)
+			return false;
+		dir_close(open_dir);
+		open_dir = dir_open(inode);
+		token = token2;
+	}
+
+	if(token == NULL)
+		return false;
+
+	strlcpy(name, token, sizeof name);
+
+	block_sector_t sector = 0;
+	success = (open_dir != NULL
+						&& free_map_allocate(1, &sector)
+						&& dir_create(sector, inode_get_inumber(dir_get_inode(open_dir)), 20)
+						&& dir_add(open_dir, name, sector));
+
+	dir_close(open_dir);
+	if(!success && sector != 0)
+		free_map_release(sector, 1);
+
+	return success;
+}
+
+static bool syscall_readdir(int fd, char *name) {
+	if(fd != 0 && fd != 1) {
+		struct thread *curr = thread_current();
+		struct file_elem *fe = file_elem_find(fd);
+
+		if(fe->dir == NULL)
+			return false;
+		else
+			return dir_readdir(fe->dir, name);
+	}
+	else
+		return false;
+}
+
+static bool syscall_isdir(int fd) {
+	if(fd < 2)
+		return false;
+
+	struct file_elem *fe = file_elem_find(fd);
+
+	if(fe == NULL)
+		return false;
+
+	if(fe->file == NULL && fe->dir != NULL)
+		return true;
+	else
+		return false;
+}
+
+static int syscall_inumber(int fd) {
+	struct file_elem *fe = file_elem_find(fd);
+
+	if(fe->file != NULL) {
+		return inode_get_inumber(file_get_inode(fe->file));
+	}
+	else if(fe->dir != NULL) {
+		return inode_get_inumber(dir_get_inode(fe->dir));
+	}
+	else {
+		PANIC("File & Directory are boyh empty\n");
+	}
+}

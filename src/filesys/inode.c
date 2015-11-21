@@ -26,8 +26,9 @@ struct inode_disk
 																					 last 1 sector for double indirect block */
 		off_t length;              			    /* File size in bytes. */
 		size_t number_of_sectors;						/* The number of allocated sectors */
+		bool isdir;													/* directory or file */
     unsigned magic;                     /* Magic number. */
-		uint32_t unused[111];               /* Not used. */
+		uint32_t unused[110];               /* Not used. */
   };
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -46,7 +47,9 @@ struct inode
     int open_cnt;                       /* Number of openers. */
     bool removed;                       /* True if deleted, false otherwise. */
     int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
-    struct inode_disk data;             /* Inode content. */
+    struct lock dir_lock;								/* lock for direcotry synch */
+		struct lock expand_lock;						/* lock for expand synch */
+		struct inode_disk data;             /* Inode content. */
   };
 
 /* Returns the block device sector that contains byte offset POS
@@ -283,7 +286,7 @@ deallocate_sectors(struct inode_disk *disk_inode) {
    Returns true if successful.
    Returns false if memory or disk allocation fails. */
 bool
-inode_create (block_sector_t sector, off_t length)
+inode_create (block_sector_t sector, off_t length, bool isdir)
 {
   struct inode_disk *disk_inode = NULL;
   bool success = false;
@@ -301,6 +304,7 @@ inode_create (block_sector_t sector, off_t length)
       disk_inode->length = length;
       disk_inode->magic = INODE_MAGIC;
   		disk_inode->number_of_sectors = 0;
+			disk_inode->isdir = isdir;
 
 			if (allocate_sectors(sectors, disk_inode))
 				{
@@ -344,6 +348,8 @@ inode_open (block_sector_t sector)
   inode->open_cnt = 1;
   inode->deny_write_cnt = 0;
   inode->removed = false;
+	lock_init(&inode->dir_lock);
+	lock_init(&inode->expand_lock);
   block_read (fs_device, inode->sector, &inode->data);
   return inode;
 }
@@ -477,6 +483,9 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
     return 0;
 
 	if(byte_to_sector(inode, offset+size-1) == -1 && offset+size <= MAX_BYTE) {
+		if(!inode_isdir(inode))
+			lock_acquire(&inode->expand_lock);
+
 		size_t total = bytes_to_sectors(size+offset);
 		size_t allocated = inode->data.number_of_sectors;
 		size_t need = total - allocated;
@@ -486,6 +495,9 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 
 		inode->data.length = size + offset;
 		block_write(fs_device, inode->sector, &inode->data);
+
+		if(!inode_isdir(inode))
+			lock_release(&inode->expand_lock);
 	}
 
   while (size > 0) 
@@ -568,5 +580,37 @@ inode_allow_write (struct inode *inode)
 off_t
 inode_length (const struct inode *inode)
 {
-  return inode->data.length;
+	struct inode_disk *disk_inode = calloc(1, BLOCK_SECTOR_SIZE);
+	if(disk_inode == NULL)
+		return -1;
+
+	block_read(fs_device, inode->sector, disk_inode);
+
+	off_t length = disk_inode-> length;
+	free(disk_inode);
+
+  return length;
+}
+
+bool
+inode_isdir(const struct inode *inode) {
+	struct inode_disk *disk_inode = calloc(1, BLOCK_SECTOR_SIZE);
+	if(disk_inode == NULL)
+		return -1;
+
+	block_read(fs_device, inode->sector, disk_inode);
+
+	bool result = disk_inode-> isdir;
+	free(disk_inode);
+	return result;
+}
+
+int
+inode_open_cnt(const struct inode *inode) {
+	return inode->open_cnt;
+}
+
+struct lock *
+inode_lock(const struct inode *inode) {
+	return &inode->dir_lock;
 }

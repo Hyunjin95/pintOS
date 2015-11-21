@@ -94,7 +94,9 @@ typedef int tid_t;
 
 struct file_elem {
 	int fd; 								/* file descriptor */
+	unsigned pos;						/* position */
 	struct file *file;			/* file pointer */
+	struct dir *dir;				/* directory pointer */
 	struct list_elem elem;	/* list element */
 };
 
@@ -134,6 +136,8 @@ struct thread
 		struct list open_files;							/* List of opened files of thread */
 		struct file *open_file;							/* Opened flle of thread */
 #endif
+
+		struct dir *dir;										/* current directory */
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
