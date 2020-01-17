@@ -4,7 +4,7 @@ Pintos is computer software, a simple instructional operating system framework f
 # Projects
 There were three projects in this class.
 
-## Scheduling
+## 1. Scheduling
 * Implement wait queue
   * When a thread goes to sleep state, make Pintos use wait queue (instead of busy wait)
 * Applying priority
@@ -12,7 +12,7 @@ There were three projects in this class.
 * Priority inversion prevension
   * Solve priority-inversion problem by priority-donation
 
-## Process & File Descriptor
+## 2. Process & File Descriptor
 * Use File System
   * Use a simple file system (built in PintOS).
 * Load User Program <br>
@@ -20,7 +20,7 @@ There were three projects in this class.
 * System Call
   * Make a system call handler, process system calls, and file system calls.
 
-## File System
+## 3. File System
 * Extensible Files
   * Modify the file system so file sizes could be increased bigger than 8MB. Expand the file every time a write is made off the end of the file.
 * Subdirectories
